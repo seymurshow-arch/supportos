@@ -29,11 +29,35 @@ const emptyParsed: ParsedSchedule = {
 
 function getMonthRange(monthKey: string) {
   const [year, month] = monthKey.split("-").map(Number);
-  const lastDay = new Date(year, month, 0).getDate();
+
+  if (!year || !month || month < 1 || month > 12) {
+    throw new Error(`Invalid month key: ${monthKey}`);
+  }
+
+  const now = new Date();
+  const yesterday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() - 1
+  );
+
+  const selectedMonthStart = new Date(year, month - 1, 1);
+  const selectedMonthEnd = new Date(year, month, 0);
+
+  const isCurrentMonth =
+    selectedMonthStart.getFullYear() === now.getFullYear() &&
+    selectedMonthStart.getMonth() === now.getMonth();
+
+  const toDate = isCurrentMonth ? yesterday : selectedMonthEnd;
+
+  const formatDate = (date: Date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+      date.getDate()
+    ).padStart(2, "0")}`;
 
   return {
     from: `${year}-${String(month).padStart(2, "0")}-01`,
-    to: `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`,
+    to: formatDate(toDate),
   };
 }
 
@@ -147,15 +171,35 @@ function getTrustpilotPoints(count: number) {
   return -5;
 }
 
-function getEscalationPoints(minutes: number) {
-  if (minutes <= 0) return 0;
-  if (minutes < 10) return 10;
-  if (minutes <= 15) return 8;
-  if (minutes <= 30) return 5;
-  if (minutes <= 45) return 2;
-  if (minutes <= 60) return 0;
-  if (minutes <= 120) return -2;
-  return -5;
+function getEscalationPoints(metric: string | number | null | undefined) {
+  if (metric == null || metric === "") return 0;
+
+  if (typeof metric === "number") {
+    if (metric < 10) return 10;
+    if (metric <= 15) return 8;
+    if (metric <= 30) return 5;
+    if (metric <= 45) return 2;
+    if (metric <= 60) return 0;
+    if (metric <= 120) return -2;
+    return -5;
+  }
+
+  const normalized = metric
+    .trim()
+    .toLowerCase()
+    .replace(/[–—]/g, "-")
+    .replace(/\s+/g, " ");
+
+  if (/^<\s*10\s*(min|mins|minute|minutes)?$/.test(normalized)) return 10;
+  if (/^10\s*-\s*15\s*(min|mins|minute|minutes)?$/.test(normalized)) return 8;
+  if (/^15\s*-\s*30\s*(min|mins|minute|minutes)?$/.test(normalized)) return 5;
+  if (/^30\s*-\s*45\s*(min|mins|minute|minutes)?$/.test(normalized)) return 2;
+  if (/^45\s*-\s*60\s*(min|mins|minute|minutes)?$/.test(normalized)) return 0;
+  if (/^1\s*-\s*2\s*(h|hr|hrs|hour|hours)?$/.test(normalized)) return -2;
+  if (/^(2\s*\+|>\s*2)\s*(h|hr|hrs|hour|hours)?$/.test(normalized)) return -5;
+
+  const numeric = Number(normalized.replace(",", ".").replace(/[^0-9.]/g, ""));
+  return Number.isFinite(numeric) ? getEscalationPoints(numeric) : 0;
 }
 
 function getQualityCardPoints(score: number) {
@@ -187,7 +231,7 @@ type Row = {
   frtEmails: number;
   art: number;
   trustpilot: number;
-  escalation: number;
+  escalation: string | number;
   qualityCard: number;
   baseSalary: number;
   csatPoints: number;
@@ -218,8 +262,8 @@ export default function KpiSalaryPage() {
   const [selectedMonth, setSelectedMonth] = useState("");
   const [parsed, setParsed] = useState<ParsedSchedule>(emptyParsed);
   const [liveKpi, setLiveKpi] = useState<Record<string, LiveKpi>>({});
-  const [qualityScores, setQualityScores] = useState<Record<string, string>>({});
-  const [escalationTimes, setEscalationTimes] = useState<Record<string, string>>({});
+  const [qualityScores, setQualityScores] = useState<Record<string, number | null>>({});
+  const [escalationTimes, setEscalationTimes] = useState<Record<string, string | null>>({});
   const [status, setStatus] = useState("Ready");
   const [loadingKpi, setLoadingKpi] = useState(false);
   const [savingSnapshot, setSavingSnapshot] = useState(false);
@@ -254,6 +298,8 @@ export default function KpiSalaryPage() {
   async function loadSchedule(monthKey: string) {
     setSelectedMonth(monthKey);
     setLiveKpi({});
+    setQualityScores({});
+    setEscalationTimes({});
     setStatus("Loading schedule...");
 
     const { data, error } = await getSchedule(monthKey);
@@ -300,9 +346,44 @@ export default function KpiSalaryPage() {
       }
 
       setLiveKpi(data.agents || {});
-      setStatus("LiveChat KPI loaded");
+      setStatus("Loading Google Sheets KPI...");
+
+      const sheetsResponse = await fetch("/api/google-sheets/kpi", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          month: selectedMonth,
+          agents: parsed.agents,
+        }),
+        cache: "no-store",
+      });
+
+      const sheetsData = await sheetsResponse.json();
+
+      if (!sheetsResponse.ok || !sheetsData.ok) {
+        throw new Error(sheetsData.error || "Google Sheets KPI error");
+      }
+
+      const nextQuality: Record<string, number | null> = {};
+      const nextEscalation: Record<string, string | null> = {};
+
+      parsed.agents.forEach((agent) => {
+        const sheetAgent = sheetsData.agents?.[agent];
+        nextQuality[agent] =
+          typeof sheetAgent?.quality === "number" ? sheetAgent.quality : null;
+        nextEscalation[agent] =
+          typeof sheetAgent?.escalation === "string" && sheetAgent.escalation.trim()
+            ? sheetAgent.escalation.trim()
+            : null;
+      });
+
+      setQualityScores(nextQuality);
+      setEscalationTimes(nextEscalation);
+      setStatus("LiveChat, HelpDesk and Google Sheets KPI loaded");
     } catch (error) {
       setLiveKpi({});
+      setQualityScores({});
+      setEscalationTimes({});
       setStatus(error instanceof Error ? error.message : "KPI load error");
     } finally {
       setLoadingKpi(false);
@@ -332,8 +413,10 @@ export default function KpiSalaryPage() {
       const trustpilot = Number(api.trustpilot || 0);
       const chats = Number(api.chats || 0);
 
-      const escalation = Number(escalationTimes[agent] || 0);
-      const qualityCard = Number(qualityScores[agent] || 0);
+      const escalationValue = escalationTimes[agent];
+      const qualityValue = qualityScores[agent];
+      const escalation = escalationValue ?? "";
+      const qualityCard = typeof qualityValue === "number" ? qualityValue : 0;
 
       const csatPoints = getCsatPoints(csat);
       const frtChatPoints = getFrtChatPoints(frtChats);
@@ -549,28 +632,11 @@ export default function KpiSalaryPage() {
                     <td className="text-center text-white/70">{row.baseSalary}€</td>
 
                     <td className="text-center">
-                      <NumberInput
-                        value={qualityScores[row.agent] ?? ""}
-                        max={100}
-                        onChange={(value) =>
-                          setQualityScores((current) => ({
-                            ...current,
-                            [row.agent]: value,
-                          }))
-                        }
-                      />
+                      <ImportedValue value={qualityScores[row.agent]} suffix="%" />
                     </td>
 
                     <td className="text-center">
-                      <NumberInput
-                        value={escalationTimes[row.agent] ?? ""}
-                        onChange={(value) =>
-                          setEscalationTimes((current) => ({
-                            ...current,
-                            [row.agent]: value,
-                          }))
-                        }
-                      />
+                      <ImportedValue value={escalationTimes[row.agent]} />
                     </td>
 
                     <td className="text-center">
@@ -622,8 +688,14 @@ export default function KpiSalaryPage() {
                   <Metric value={`${row.frtEmails}m`} points={row.frtEmailPoints} />
                   <Metric value={`${row.art}s`} points={row.artPoints} />
                   <Metric value={row.trustpilot} points={row.trustpilotPoints} />
-                  <Metric value={`${row.escalation}m`} points={row.escalationPoints} />
-                  <Metric value={row.qualityCard} points={row.qualityCardPoints} />
+                  <Metric
+                    value={escalationTimes[row.agent] == null ? "No data" : row.escalation}
+                    points={row.escalationPoints}
+                  />
+                  <Metric
+                    value={qualityScores[row.agent] == null ? "No data" : row.qualityCard}
+                    points={row.qualityCardPoints}
+                  />
                   <td className="text-center font-black text-yellow-300">
                     {row.totalKpiPoints}
                   </td>
@@ -727,27 +799,21 @@ export default function KpiSalaryPage() {
   );
 }
 
-function NumberInput({
+function ImportedValue({
   value,
-  max,
-  onChange,
+  suffix = "",
 }: {
-  value: string;
-  max?: number;
-  onChange: (value: string) => void;
+  value: string | number | null | undefined;
+  suffix?: string;
 }) {
+  if (value == null) {
+    return <span className="text-xs font-semibold text-white/35">No data</span>;
+  }
+
   return (
-    <input
-      value={value}
-      inputMode="numeric"
-      placeholder="0"
-      onChange={(event) => {
-        const raw = event.target.value.replace(/\D/g, "");
-        const next = raw === "" ? "" : max ? String(Math.min(Number(raw), max)) : raw;
-        onChange(next);
-      }}
-      className="h-9 w-20 rounded-lg border border-white/10 bg-white/[0.03] text-center text-white outline-none focus:border-cyan-400/40"
-    />
+    <span className="inline-flex min-w-20 justify-center rounded-lg border border-cyan-400/20 bg-cyan-400/10 px-3 py-2 font-semibold text-cyan-300">
+      {value}{suffix}
+    </span>
   );
 }
 

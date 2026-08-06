@@ -7,6 +7,7 @@ import {
   Settings,
   TimerReset,
   WalletCards,
+  Star,
 } from "lucide-react";
 
 export const navigation = [
@@ -16,7 +17,10 @@ export const navigation = [
   },
   {
     title: "Analytics",
-    items: [{ name: "Reports", href: "/reports", icon: BarChart3 }],
+    items: [
+      { name: "Reports", href: "/reports", icon: BarChart3 },
+      { name: "Trustpilot", href: "/trustpilot", icon: Star },
+    ],
   },
   {
     title: "Operations",

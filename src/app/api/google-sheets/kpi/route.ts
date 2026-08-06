@@ -16,7 +16,7 @@ type RequestBody = {
 
 type SheetAgentKpi = {
   quality: number | null;
-  escalation: string | null;
+  escalation: number | null;
 };
 
 function normalizeText(value: unknown) {
@@ -258,7 +258,7 @@ export async function POST(request: NextRequest) {
 
       result[canonicalName] = {
         quality: parseNumber(row[qualityIndex]),
-        escalation: String(row[escalationIndex] ?? "").trim() || null,
+        escalation: parseNumber(row[escalationIndex]),
       };
     }
 

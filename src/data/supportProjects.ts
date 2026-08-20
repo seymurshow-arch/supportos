@@ -7,6 +7,8 @@ export const SUPPORT_PROJECTS = [
   "50 Crowns",
   "Haha Spin",
   "Galleon",
+  "Inky",
+  "Spartastic",
 ] as const;
 
 export type SupportProjectName = (typeof SUPPORT_PROJECTS)[number];

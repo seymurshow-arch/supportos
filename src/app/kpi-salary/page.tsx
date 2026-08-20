@@ -61,9 +61,79 @@ function splitTimeRange(start: string, end: string) {
   return { day: day / 60, night: night / 60 };
 }
 
-function getShiftHours(value: string) {
+type BaseCycleShift = "D" | "E" | "N" | "OFF";
+
+const BASE_SHIFT_CYCLE: BaseCycleShift[] = ["D", "E", "N", "OFF", "OFF"];
+
+function isPaidLeave(value: string) {
+  return /^(?:vacation|vac|annual\s*leave|sick\s*leave)$/i.test(value.trim());
+}
+
+function getSimpleCycleShift(value: string): BaseCycleShift | null {
+  const clean = value.trim();
+
+  if (!clean || /^(?:OFF|DAY\s*OFF|O|-)$/i.test(clean)) return "OFF";
+  if (/^[DEN]$/i.test(clean)) return clean.toUpperCase() as "D" | "E" | "N";
+
+  // Leave, training, custom ranges and combined/extra shifts do not tell us
+  // what the agent's underlying 3/2 shift should have been.
+  return null;
+}
+
+function inferBaseCycleOffset(shifts: string[]) {
+  let bestOffset = 0;
+  let bestScore = Number.NEGATIVE_INFINITY;
+
+  for (let offset = 0; offset < BASE_SHIFT_CYCLE.length; offset += 1) {
+    let score = 0;
+    let evidence = 0;
+
+    shifts.forEach((value, index) => {
+      const observed = getSimpleCycleShift(value);
+      if (!observed) return;
+
+      const expected = BASE_SHIFT_CYCLE[(index + offset) % BASE_SHIFT_CYCLE.length];
+      evidence += 1;
+
+      if (observed === expected) {
+        // Explicit D/E/N cells are stronger evidence than an empty OFF cell.
+        score += observed === "OFF" ? 1 : 5;
+      } else {
+        score -= observed === "OFF" ? 1 : 4;
+      }
+    });
+
+    // Prefer an offset backed by more usable cells when scores tie.
+    score += evidence * 0.001;
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestOffset = offset;
+    }
+  }
+
+  return bestOffset;
+}
+
+function getExpectedBaseShift(index: number, cycleOffset: number): BaseCycleShift {
+  return BASE_SHIFT_CYCLE[(index + cycleOffset) % BASE_SHIFT_CYCLE.length];
+}
+
+function getShiftHours(value: string, expectedBaseShift?: BaseCycleShift) {
   const clean = value.trim();
   if (!clean) return { day: 0, night: 0 };
+
+  // Vacation and Sick leave are paid only when the agent would normally
+  // work according to the underlying D -> E -> N -> OFF -> OFF cycle.
+  if (isPaidLeave(clean)) {
+    if (expectedBaseShift === "D" || expectedBaseShift === "E") {
+      return { day: 8, night: 0 };
+    }
+    if (expectedBaseShift === "N") {
+      return { day: 0, night: 8 };
+    }
+    return { day: 0, night: 0 };
+  }
 
   let day = 0;
   let night = 0;
@@ -81,8 +151,6 @@ function getShiftHours(value: string) {
     .replace(/\d{1,2}:\d{2}\s*[-–]\s*\d{1,2}:\d{2}/g, "")
     .replace(/Day SM/gi, "")
     .replace(/Training/gi, "")
-    .replace(/Sick leave/gi, "")
-    .replace(/Vacation/gi, "")
     .split(/[\s+]+/)
     .map((x) => x.trim().toUpperCase())
     .filter(Boolean);
@@ -94,7 +162,6 @@ function getShiftHours(value: string) {
 
   if (/\bday sm\b/i.test(clean)) day += 8;
   if (/\btraining\b/i.test(clean)) day += 8;
-  if (/\bsick leave\b/i.test(clean)) day += 8;
 
   return { day, night };
 }
@@ -149,7 +216,7 @@ function getTrustpilotPoints(count: number) {
 
 function getEscalationPoints(minutes: number) {
   if (minutes <= 0) return 0;
-  if (minutes < 10) return 10;
+  if (minutes <= 10) return 10;
   if (minutes <= 15) return 8;
   if (minutes <= 30) return 5;
   if (minutes <= 45) return 2;
@@ -352,9 +419,11 @@ export default function KpiSalaryPage() {
 
       let dayHours = 0;
       let nightHours = 0;
+      const cycleOffset = inferBaseCycleOffset(shifts);
 
-      shifts.forEach((shift) => {
-        const hours = getShiftHours(shift);
+      shifts.forEach((shift, index) => {
+        const expectedBaseShift = getExpectedBaseShift(index, cycleOffset);
+        const hours = getShiftHours(shift, expectedBaseShift);
         dayHours += hours.day;
         nightHours += hours.night;
       });

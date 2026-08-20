@@ -3,6 +3,7 @@ import {
   Bot,
   CalendarDays,
   Gauge,
+  Link2,
   LayoutDashboard,
   Settings,
   TimerReset,
@@ -26,6 +27,7 @@ export const navigation = [
     title: "Operations",
     items: [
       { name: "Schedule", href: "/schedule", icon: CalendarDays },
+      { name: "Agent Mapping", href: "/agent-mapping", icon: Link2 },
       { name: "Agent Breaks", href: "/agent-breaks", icon: TimerReset },
       { name: "KPI & Salary", href: "/kpi-salary", icon: WalletCards },
     ],

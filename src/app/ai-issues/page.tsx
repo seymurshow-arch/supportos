@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { SUPPORT_PROJECTS } from "@/data/supportProjects";
 
 type TagOption = {
   tag: string;
@@ -66,15 +67,7 @@ type AiResponse = {
   error?: string;
 };
 
-const PROJECTS = [
-  "LunuBet",
-  "Roostino",
-  "WonderLuck",
-  "FanoBet",
-  "Tip-top",
-  "50 Crowns",
-  "Haha Spin",
-];
+const PROJECTS = [...SUPPORT_PROJECTS];
 
 function pad2(value: number) {
   return String(value).padStart(2, "0");

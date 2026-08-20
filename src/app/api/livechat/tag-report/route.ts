@@ -437,7 +437,8 @@ export async function GET(request: Request) {
 
     const modeParam = searchParams.get("mode");
     const isListMode = modeParam === "list";
-    const comparisonMode = isListMode ? null : modeParam;
+    const isExportMode = modeParam === "export";
+    const comparisonMode = isListMode || isExportMode ? null : modeParam;
     const projectParam = normalizeProject(searchParams.get("project"));
 
     const { from, to } = normalizeDateRange(
@@ -451,6 +452,41 @@ export async function GET(request: Request) {
       projectParam.length > 0
         ? projects.find((item) => item.name.toLowerCase() === projectParam) || null
         : null;
+
+    if (isExportMode) {
+      const currentBreakdown = await getTagBreakdown(from, to, project);
+
+      const rows: TagRow[] = Array.from(currentBreakdown.totalByTag.entries())
+        .map(([tag, total]) => {
+          const vip = currentBreakdown.vipByTag.get(tag) || 0;
+          const regular = currentBreakdown.regularByTag.get(tag) || 0;
+
+          return {
+            tag,
+            label: normalizeTagLabel(tag),
+            total,
+            vip,
+            regular,
+            previousTotal: 0,
+            changePercent: null,
+            changeLabel: "",
+            triggers: [],
+          };
+        })
+        .sort((a, b) => {
+          if (b.total !== a.total) return b.total - a.total;
+          return a.label.localeCompare(b.label);
+        });
+
+      return NextResponse.json({
+        ok: true,
+        mode: "export",
+        project: project?.name || null,
+        period: { from, to },
+        archivesLoaded: currentBreakdown.archivesLoaded,
+        rows,
+      });
+    }
 
     if (isListMode) {
       const currentTags = await getTagsReport(from, to, project);

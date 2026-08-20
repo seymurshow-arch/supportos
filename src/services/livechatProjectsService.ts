@@ -1,4 +1,5 @@
 import { livechatPost } from "@/livechat";
+import { SUPPORT_PROJECTS } from "@/data/supportProjects";
 
 export type LiveChatProject = {
   name: string;
@@ -11,15 +12,7 @@ export type LiveChatGroup = {
   name: string;
 };
 
-const DEFAULT_PROJECT_NAMES = [
-  "LunuBet",
-  "Roostino",
-  "WonderLuck",
-  "FanoBet",
-  "Tip-top",
-  "50 Crowns",
-  "Haha Spin",
-];
+const DEFAULT_PROJECT_NAMES = [...SUPPORT_PROJECTS];
 
 function normalize(value: string) {
   return value.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
@@ -27,7 +20,7 @@ function normalize(value: string) {
 
 function shouldIgnoreGroup(groupName: string) {
   const value = normalize(groupName);
-  return ["test", "internal", "sandbox", "demo", "galleon", "inky"].some((word) =>
+  return ["test", "internal", "sandbox", "demo"].some((word) =>
     value.includes(word),
   );
 }
@@ -43,7 +36,7 @@ export async function listLiveChatGroups(): Promise<LiveChatGroup[]> {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export async function resolveLiveChatProjects(
+export async function resolveConfiguredLiveChatProjects(
   projectNames: string[] = DEFAULT_PROJECT_NAMES,
 ): Promise<LiveChatProject[]> {
   const groups = await listLiveChatGroups();
@@ -60,8 +53,14 @@ export async function resolveLiveChatProjects(
         groupNames: matched.map((group) => group.name),
       };
     })
-    .filter((project) => project.groupIds.length > 0)
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export async function resolveLiveChatProjects(
+  projectNames: string[] = DEFAULT_PROJECT_NAMES,
+): Promise<LiveChatProject[]> {
+  const projects = await resolveConfiguredLiveChatProjects(projectNames);
+  return projects.filter((project) => project.groupIds.length > 0);
 }
 
 export async function getLiveChatProjects(): Promise<LiveChatProject[]> {

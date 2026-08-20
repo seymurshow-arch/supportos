@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BarChart3, CalendarDays, ChevronLeft, ChevronRight, MessageSquare, Save, Trash2, X } from "lucide-react";
+import { BarChart3, CalendarDays, ChevronLeft, ChevronRight, FileUp, MessageSquare, Save, Trash2, X } from "lucide-react";
 
 import Card from "@/components/ui/Card";
 import PageHeader from "@/components/ui/PageHeader";
@@ -24,6 +24,7 @@ type ProjectRow = {
   negative: number;
   csat: number;
   avgChatDurationSec: number;
+  totalChatTimeSec?: number;
 };
 
 type TagRow = {
@@ -150,6 +151,7 @@ export default function ReportsPage() {
   const [savedReports, setSavedReports] = useState<SavedReport[]>([]);
   const [status, setStatus] = useState("Ready");
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [initialProjectsLoaded, setInitialProjectsLoaded] = useState(false);
 
   const range = useMemo(() => {
@@ -270,6 +272,91 @@ export default function ReportsPage() {
       setStatus(error instanceof Error ? error.message : "Report load error");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleExportGoogleSheets() {
+    if (reportType !== "weekly") {
+      setStatus("Google Sheets export is available for weekly reports only.");
+      return;
+    }
+
+    setExporting(true);
+    setStatus("Preparing all project reports for Google Sheets...");
+
+    try {
+      const reportParams = new URLSearchParams({ from: range.from, to: range.to });
+      const allResponse = await fetch(`/api/livechat/reports?${reportParams.toString()}`, {
+        cache: "no-store",
+      });
+      const allJson: ReportData = await allResponse.json();
+
+      if (!allResponse.ok || !allJson.ok) {
+        throw new Error("Failed to load all-project report data");
+      }
+
+      const projectRows = (allJson.projects ?? []).filter((item) => item?.name);
+      if (!projectRows.length) throw new Error("No projects found for export");
+
+      setStatus(`Loading tags for ${projectRows.length} projects...`);
+
+      const tagResults = await Promise.all(
+        projectRows.map(async (item) => {
+          const params = new URLSearchParams({
+            from: range.from,
+            to: range.to,
+            project: item.name,
+            mode: "export",
+          });
+          const response = await fetch(`/api/livechat/tag-report?${params.toString()}`, {
+            cache: "no-store",
+          });
+          const json: TagReportData = await response.json();
+          if (!response.ok || !json.ok) {
+            throw new Error(`Tag export data failed for ${item.name}`);
+          }
+          return { name: item.name, rows: json.rows ?? [] };
+        })
+      );
+
+      const tagsByProject = new Map(tagResults.map((item) => [item.name, item.rows]));
+
+      setStatus("Writing weekly report to Google Sheets...");
+      const exportResponse = await fetch("/api/google-sheets/report-export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          from: range.from,
+          to: range.to,
+          allSummary: {
+            chats: allJson.summary.totalChats,
+            totalChatTimeSec: allJson.summary.totalChatTimeSec,
+            avgChatDurationSec: allJson.summary.avgChatDurationSec,
+            csat: allJson.summary.csatPercent,
+          },
+          projects: projectRows.map((item) => ({
+            name: item.name,
+            chats: item.chats,
+            totalChatTimeSec: item.totalChatTimeSec,
+            avgChatDurationSec: item.avgChatDurationSec,
+            csat: item.csat,
+            tags: tagsByProject.get(item.name) ?? [],
+          })),
+        }),
+      });
+
+      const exportJson = await exportResponse.json();
+      if (!exportResponse.ok || !exportJson.ok) {
+        throw new Error(exportJson.error || "Google Sheets export failed");
+      }
+
+      setStatus(
+        `Exported ${exportJson.week} → ${exportJson.month} (${exportJson.projectsExported?.length ?? 0} projects + ALL Brands)`
+      );
+    } catch (error) {
+      setStatus(error instanceof Error ? `Export error: ${error.message}` : "Export failed");
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -458,6 +545,15 @@ export default function ReportsPage() {
             className="flex h-12 items-center gap-2 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-6 font-bold text-emerald-300 hover:bg-emerald-400/15 disabled:opacity-40"
           >
             <Save size={16} /> Save Report
+          </button>
+
+          <button
+            onClick={handleExportGoogleSheets}
+            disabled={!report || loading || exporting || reportType !== "weekly"}
+            title={reportType !== "weekly" ? "Weekly reports only" : "Export this week for all projects"}
+            className="flex h-12 items-center gap-2 rounded-2xl border border-violet-400/30 bg-violet-400/10 px-6 font-bold text-violet-200 hover:bg-violet-400/15 disabled:opacity-40"
+          >
+            <FileUp size={16} /> {exporting ? "Exporting..." : "Export Report"}
           </button>
 
           <div className="text-sm text-white/45">{status}</div>

@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { SUPPORT_PROJECTS } from "@/data/supportProjects";
 
 type Project = { name: string; groupIds: number[]; groupNames?: string[] };
 type ProblemStatus = "important" | "growing" | "decreasing" | "new" | "disappeared";
@@ -44,7 +45,7 @@ type AnalysisResponse = {
 };
 
 const PROJECT_STORAGE_KEY = "supportos-command-projects-v1";
-const DEFAULT_PROJECTS = ["50 Crowns", "FanoBet", "Haha Spin", "LunuBet", "Roostino", "Tip-top", "WonderLuck"];
+const DEFAULT_PROJECTS = [...SUPPORT_PROJECTS];
 
 function isoDate(date: Date) {
   const offset = date.getTimezoneOffset();
@@ -177,7 +178,8 @@ export default function CommandCenterPage() {
     setError("");
     try {
       const stored = localStorage.getItem(PROJECT_STORAGE_KEY);
-      const names = stored ? (JSON.parse(stored) as string[]) : DEFAULT_PROJECTS;
+      const storedNames = stored ? (JSON.parse(stored) as string[]) : [];
+      const names = [...new Set([...DEFAULT_PROJECTS, ...storedNames])];
       await syncProjects(names);
 
       const params = new URLSearchParams({ from, to });

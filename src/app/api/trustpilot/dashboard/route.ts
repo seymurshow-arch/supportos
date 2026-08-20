@@ -70,6 +70,8 @@ const DOMAIN_ENV_KEYS: Record<string, string[]> = {
   "50 Crowns": ["TRUSTPILOT_DOMAIN_50_CROWNS", "TRUSTPILOT_DOMAIN_50CROWNS"],
   "Haha Spin": ["TRUSTPILOT_DOMAIN_HAHA_SPIN", "TRUSTPILOT_DOMAIN_HAHASPIN"],
   Galleon: ["TRUSTPILOT_DOMAIN_GALLEON"],
+  Inky: ["TRUSTPILOT_DOMAIN_INKY"],
+  Spartastic: ["TRUSTPILOT_DOMAIN_SPARTASTIC"],
 };
 
 function domainForProject(project: string) {

@@ -290,6 +290,7 @@ async function getProjectStats(from: string, to: string, project: ProjectFilter)
     csat: rating.csatPercent,
     frt: responseTime,
     avgChatDurationSec: duration.avgChatDurationSec,
+    totalChatTimeSec: duration.totalDurationSec,
   };
 }
 
@@ -352,7 +353,7 @@ export async function GET(request: Request) {
         avgFrt: responseTime,
         avgFrtSec: responseTime,
         avgChatDurationSec: durationResult.avgChatDurationSec,
-        totalChatTimeSec: totalChats * durationResult.avgChatDurationSec,
+        totalChatTimeSec: durationResult.totalDurationSec,
         csatPercent: ratingResult.csatPercent,
         positive: ratingResult.good,
         negative: ratingResult.bad,

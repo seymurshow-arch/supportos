@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resolveLiveChatProjects } from "@/services/livechatProjectsService";
+import { resolveConfiguredLiveChatProjects } from "@/services/livechatProjectsService";
 
 export async function GET(request: Request) {
   try {
@@ -9,7 +9,7 @@ export async function GET(request: Request) {
       .map((name) => name.trim())
       .filter(Boolean);
 
-    const projects = await resolveLiveChatProjects(names.length ? names : undefined);
+    const projects = await resolveConfiguredLiveChatProjects(names.length ? names : undefined);
     return NextResponse.json({ ok: true, projects });
   } catch (error) {
     return NextResponse.json(

@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { BadgeEuro, MessageSquare, Moon, Trash2, Users } from "lucide-react";
+import { BadgeEuro, MessageSquare, Moon, RefreshCw, Trash2, Users } from "lucide-react";
 
 import Card from "@/components/ui/Card";
 import PageHeader from "@/components/ui/PageHeader";
 import StatCard from "@/components/ui/StatCard";
-import { getSchedule, getSchedules, type Schedule } from "@/services/scheduleService";
 import {
   deleteSalarySnapshot,
   getSalarySnapshots,
@@ -26,6 +25,32 @@ const emptyParsed: ParsedSchedule = {
   days: [],
   rows: {},
 };
+
+type GoogleScheduleMonth = {
+  title: string;
+  monthKey: string;
+};
+
+type GoogleScheduleResponse = {
+  ok: boolean;
+  error?: string;
+  month?: string;
+  sheetTitle?: string;
+  agents?: string[];
+  days?: string[];
+  rows?: Record<string, string[]>;
+  availableMonths?: GoogleScheduleMonth[];
+};
+
+type AgentMapping = {
+  schedule_name: string;
+  email: string;
+};
+
+function getCurrentMonthKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
 
 function getMonthRange(monthKey: string) {
   const [year, month] = monthKey.split("-").map(Number);
@@ -175,7 +200,7 @@ function getCsatPoints(csat: number) {
 }
 
 function getFrtChatPoints(seconds: number) {
-  if (seconds < 15) return 10;
+  if (seconds <= 15) return 10;
   if (seconds <= 20) return 8;
   if (seconds <= 25) return 7;
   if (seconds <= 31) return 5;
@@ -187,7 +212,7 @@ function getFrtChatPoints(seconds: number) {
 
 function getFrtEmailPoints(minutes: number) {
   if (minutes <= 0) return 0;
-  if (minutes < 30) return 10;
+  if (minutes <= 30) return 10;
   if (minutes <= 35) return 8;
   if (minutes <= 40) return 6;
   if (minutes <= 45) return 5;
@@ -198,10 +223,9 @@ function getFrtEmailPoints(minutes: number) {
 }
 
 function getArtPoints(seconds: number) {
-  const minutes = seconds / 60;
-  if (minutes <= 2) return 5;
-  if (minutes <= 3) return 2;
-  if (minutes <= 5) return 0;
+  if (seconds <= 121) return 5;
+  if (seconds <= 181) return 2;
+  if (seconds <= 301) return 0;
   return -5;
 }
 
@@ -280,7 +304,7 @@ type Totals = {
 };
 
 export default function KpiSalaryPage() {
-  const [savedSchedules, setSavedSchedules] = useState<Schedule[]>([]);
+  const [availableMonths, setAvailableMonths] = useState<GoogleScheduleMonth[]>([]);
   const [savedSnapshots, setSavedSnapshots] = useState<SalarySnapshot[]>([]);
   const [selectedMonth, setSelectedMonth] = useState("");
   const [parsed, setParsed] = useState<ParsedSchedule>(emptyParsed);
@@ -302,59 +326,156 @@ export default function KpiSalaryPage() {
     setSavedSnapshots(data ?? []);
   }
 
-  async function loadSchedules() {
-    const { data, error } = await getSchedules();
+  async function loadAgentMappings() {
+    const response = await fetch("/api/agent-mappings", { cache: "no-store" });
+    const json = await response.json();
 
-    if (error) {
-      setStatus(`Load error: ${error.message}`);
-      return;
+    if (!response.ok) {
+      throw new Error(json.error || "Failed to load Agent Mapping");
     }
 
-    const schedules = data ?? [];
-    setSavedSchedules(schedules);
+    const mappings = Array.isArray(json.data) ? (json.data as AgentMapping[]) : [];
 
-    if (schedules.length > 0) {
-      await loadSchedule(schedules[0].month_key);
+    return new Map(
+      mappings.map((item) => [
+        item.schedule_name.trim(),
+        item.email.trim().toLowerCase(),
+      ])
+    );
+  }
+
+  async function fetchGoogleSchedule(
+    monthKey: string,
+    allowFallback = true
+  ): Promise<{ monthKey: string; parsed: ParsedSchedule; title: string }> {
+    const response = await fetch(
+      `/api/google-sheets/schedule?month=${encodeURIComponent(monthKey)}&t=${Date.now()}`,
+      { cache: "no-store" }
+    );
+
+    const data = (await response.json()) as GoogleScheduleResponse;
+    const months = Array.isArray(data.availableMonths) ? data.availableMonths : [];
+
+    if (months.length > 0) {
+      setAvailableMonths(months);
+    }
+
+    if (!response.ok || !data.ok) {
+      const fallback = months[0]?.monthKey;
+
+      if (allowFallback && fallback && fallback !== monthKey) {
+        return fetchGoogleSchedule(fallback, false);
+      }
+
+      throw new Error(data.error || "Google Schedule load error");
+    }
+
+    const mappings = await loadAgentMappings();
+    const agents = Array.isArray(data.agents) ? data.agents : [];
+    const days = Array.isArray(data.days) ? data.days : [];
+    const scheduleRows = data.rows ?? {};
+
+    const agentDetails = Object.fromEntries(
+      agents.map((agent) => [
+        agent,
+        {
+          name: agent,
+          label: agent,
+          email: mappings.get(agent) || null,
+        },
+      ])
+    );
+
+    return {
+      monthKey: data.month || monthKey,
+      title: data.sheetTitle || monthKey,
+      parsed: {
+        agents,
+        agentDetails,
+        days,
+        rows: scheduleRows,
+      },
+    };
+  }
+
+  async function loadGoogleSchedule(monthKey: string, allowFallback = true) {
+    if (!monthKey) return;
+
+    setStatus("Loading Google Schedule...");
+
+    try {
+      const fresh = await fetchGoogleSchedule(monthKey, allowFallback);
+
+      setSelectedMonth(fresh.monthKey);
+      setParsed(fresh.parsed);
+      setLiveKpi({});
+      setQualityScores({});
+      setEscalationTimes({});
+
+      const missing = fresh.parsed.agents.filter(
+        (agent) => !fresh.parsed.agentDetails?.[agent]?.email
+      );
+
+      if (missing.length > 0) {
+        setStatus(`Schedule loaded. Map agents first: ${missing.join(", ")}`);
+      } else {
+        setStatus(`Google Schedule loaded: ${fresh.title}`);
+      }
+    } catch (error) {
+      setParsed(emptyParsed);
+      setStatus(
+        error instanceof Error ? error.message : "Google Schedule load error"
+      );
     }
   }
 
-  async function loadSchedule(monthKey: string) {
-    setSelectedMonth(monthKey);
-    setLiveKpi({});
-    setQualityScores({});
-    setEscalationTimes({});
-    setStatus("Loading schedule...");
-
-    const { data, error } = await getSchedule(monthKey);
-
-    if (error || !data) {
-      setParsed(emptyParsed);
-      setStatus("No saved schedule");
-      return;
-    }
-
-    setParsed(data.parsed_data as ParsedSchedule);
-    setStatus(`Loaded ${data.title}`);
+  async function loadInitialSchedule() {
+    await loadGoogleSchedule(getCurrentMonthKey(), true);
   }
 
   async function loadKpi() {
-    if (!selectedMonth || parsed.agents.length === 0) return;
-
-    const agents = parsed.agents
-      .map((agent) => parsed.agentDetails?.[agent])
-      .filter((agent): agent is NonNullable<typeof agent> => Boolean(agent?.email));
-
-    if (!agents.length) {
-      setStatus("No agent emails found in schedule");
-      return;
-    }
-
-    const { from, to } = getMonthRange(selectedMonth);
+    if (!selectedMonth) return;
 
     setLoadingKpi(true);
-    setStatus("Loading LiveChat KPI...");
+    setStatus("Refreshing Google Schedule...");
 
     try {
+      const fresh = await fetchGoogleSchedule(selectedMonth, false);
+      const freshParsed = fresh.parsed;
+
+      setSelectedMonth(fresh.monthKey);
+      setParsed(freshParsed);
+
+      const missingMappings = freshParsed.agents.filter(
+        (agent) => !freshParsed.agentDetails?.[agent]?.email
+      );
+
+      if (missingMappings.length > 0) {
+        setLiveKpi({});
+        setQualityScores({});
+        setEscalationTimes({});
+        setStatus(`Map agents first: ${missingMappings.join(", ")}`);
+        return;
+      }
+
+      const agents = freshParsed.agents
+        .map((agent) => freshParsed.agentDetails?.[agent])
+        .filter(
+          (agent): agent is NonNullable<typeof agent> => Boolean(agent?.email)
+        );
+
+      if (!agents.length) {
+        setLiveKpi({});
+        setQualityScores({});
+        setEscalationTimes({});
+        setStatus("No agent emails found in Google Schedule");
+        return;
+      }
+
+      const { from, to } = getMonthRange(fresh.monthKey);
+
+      setStatus("Loading LiveChat KPI...");
+
       const response = await fetch(
         `/api/livechat/agent-kpi?from=${from}&to=${to}&agents=${encodeURIComponent(
           agents.map((a) => a.email).join(",")
@@ -375,8 +496,8 @@ export default function KpiSalaryPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          month: selectedMonth,
-          agents: parsed.agents,
+          month: fresh.monthKey,
+          agents: freshParsed.agents,
         }),
         cache: "no-store",
       });
@@ -390,17 +511,23 @@ export default function KpiSalaryPage() {
       const nextQuality: Record<string, number | null> = {};
       const nextEscalation: Record<string, number | null> = {};
 
-      parsed.agents.forEach((agent) => {
+      freshParsed.agents.forEach((agent) => {
         const sheetAgent = sheetsData.agents?.[agent];
+
         nextQuality[agent] =
           typeof sheetAgent?.quality === "number" ? sheetAgent.quality : null;
+
         nextEscalation[agent] =
-          typeof sheetAgent?.escalation === "number" ? sheetAgent.escalation : null;
+          typeof sheetAgent?.escalation === "number"
+            ? sheetAgent.escalation
+            : null;
       });
 
       setQualityScores(nextQuality);
       setEscalationTimes(nextEscalation);
-      setStatus("LiveChat, HelpDesk and Google Sheets KPI loaded");
+      setStatus(
+        `Fresh Google Schedule + LiveChat + HelpDesk + KPI loaded (${fresh.title})`
+      );
     } catch (error) {
       setLiveKpi({});
       setQualityScores({});
@@ -514,7 +641,7 @@ export default function KpiSalaryPage() {
     setStatus("Saving salary snapshot...");
 
     const title =
-      savedSchedules.find((schedule) => schedule.month_key === selectedMonth)?.title ??
+      availableMonths.find((item) => item.monthKey === selectedMonth)?.title ??
       selectedMonth;
 
     const { error } = await saveSalarySnapshot({
@@ -553,8 +680,8 @@ export default function KpiSalaryPage() {
   }
 
   useEffect(() => {
-    loadSchedules();
-    loadSnapshots();
+    void loadInitialSchedule();
+    void loadSnapshots();
   }, []);
 
   return (
@@ -563,7 +690,7 @@ export default function KpiSalaryPage() {
         <PageHeader
           eyebrow="Operations"
           title="KPI & Salary"
-          description="Schedule comes from Supabase. LiveChat KPI excludes spam only from CSAT and is matched by agent email."
+          description="Schedule comes directly from Google Sheets. Load KPI always refreshes the latest schedule before recalculating Day, Night, Base and Final salary."
         />
       </Card>
 
@@ -571,20 +698,22 @@ export default function KpiSalaryPage() {
         <div className="flex flex-wrap items-end gap-4">
           <div>
             <label className="mb-2 block text-xs uppercase tracking-[0.2em] text-white/40">
-              Saved Schedule
+              Schedule month
             </label>
 
             <select
               value={selectedMonth}
-              onChange={(e) => loadSchedule(e.target.value)}
+              onChange={(e) => loadGoogleSchedule(e.target.value, false)}
               className="h-12 rounded-2xl border border-white/10 bg-[#080B12] px-4 text-white outline-none"
             >
-              {savedSchedules.length === 0 ? (
-                <option value="">No saved schedules</option>
+              {availableMonths.length === 0 ? (
+                <option value={selectedMonth || ""}>
+                  {selectedMonth || "Loading months..."}
+                </option>
               ) : (
-                savedSchedules.map((schedule) => (
-                  <option key={schedule.id} value={schedule.month_key}>
-                    {schedule.title}
+                availableMonths.map((item) => (
+                  <option key={item.monthKey} value={item.monthKey}>
+                    {item.title}
                   </option>
                 ))
               )}
@@ -592,11 +721,22 @@ export default function KpiSalaryPage() {
           </div>
 
           <button
+            onClick={() =>
+              selectedMonth && loadGoogleSchedule(selectedMonth, false)
+            }
+            disabled={!selectedMonth || loadingKpi}
+            className="inline-flex h-12 items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-5 font-semibold text-white/70 hover:bg-white/[0.07] disabled:opacity-40"
+          >
+            <RefreshCw size={16} />
+            Refresh Schedule
+          </button>
+
+          <button
             onClick={loadKpi}
-            disabled={loadingKpi || parsed.agents.length === 0}
+            disabled={loadingKpi || !selectedMonth}
             className="h-12 rounded-2xl border border-cyan-400/30 bg-cyan-400/10 px-6 font-semibold text-cyan-300 hover:bg-cyan-400/15 disabled:opacity-40"
           >
-            {loadingKpi ? "Loading..." : "Load KPI"}
+            {loadingKpi ? "Refreshing + Loading..." : "Load KPI"}
           </button>
 
           <button

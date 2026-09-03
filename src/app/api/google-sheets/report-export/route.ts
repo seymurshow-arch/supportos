@@ -8,19 +8,10 @@ const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const SHEETS_SCOPE = "https://www.googleapis.com/auth/spreadsheets";
 
 const PROJECT_SHEETS: Record<string, string> = {
-  "50 Crowns": "50Crowns",
-  "Tip-top": "TipTop",
-  FanoBet: "FanoBet",
-  WonderLuck: "WonderLuck",
-  LunuBet: "LunuBet",
-  Roostino: "Roostino",
-  "Haha Spin": "HAHA",
-  Galleon: "Galleon",
-  Inky: "Inky",
-  Spartastic: "Spartastic",
+  SportBet: "SportBet",
 };
 
-const ALL_BRANDS_SHEET = "ALL Brands";
+const ALL_BRANDS_SHEET = "SportBet Summary";
 
 const HEADER_BG = { red: 23 / 255, green: 54 / 255, blue: 93 / 255 };
 const MONTH_BG = { red: 68 / 255, green: 114 / 255, blue: 196 / 255 };
@@ -367,7 +358,7 @@ function aggregateProjects(projects: ProjectPayload[]): ProjectPayload {
     .map((p) => Number(p.csat));
 
   return {
-    name: "All Projects",
+    name: "SportBet",
     chats: totalChats,
     avgChatDurationSec: totalChats > 0 ? totalTimeSec / totalChats : 0,
     csat: csatValues.length ? csatValues.reduce((a, b) => a + b, 0) / csatValues.length : 0,
@@ -755,7 +746,7 @@ function addHeaderRequests(requests: any[], sheet: SheetInfo) {
   const isAll = sheet.title === ALL_BRANDS_SHEET;
   const title = `${sheet.title} — Support Weekly Report`;
   const note = isAll
-    ? "SupportOS creates weekly KPI blocks here. Tags are intentionally not exported to ALL Brands."
+    ? "SupportOS creates weekly KPI blocks here. Tags are intentionally not exported to SportBet Summary."
     : "SupportOS creates the selected week only after Export Report. Each project week includes KPI + real tags; Top 10 tags are highlighted.";
 
   requests.push(
@@ -1038,7 +1029,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // ALL Brands: KPI only, no tags.
+      // SportBet Summary: KPI only, no tags.
       // Prefer the direct all-project LiveChat summary so empty/new projects with 0 metrics
       // do not distort CSAT or average duration.
       const directSummary = body.allSummary;
@@ -1048,7 +1039,7 @@ export async function POST(request: NextRequest) {
         Number.isFinite(Number(directSummary.avgChatDurationSec)) &&
         Number.isFinite(Number(directSummary.csat))
           ? {
-              name: "All Projects",
+              name: "SportBet",
               chats: Math.max(0, Number(directSummary.chats) || 0),
               totalChatTimeSec: Math.max(0, Number(directSummary.totalChatTimeSec) || 0),
               avgChatDurationSec: Math.max(0, Number(directSummary.avgChatDurationSec) || 0),

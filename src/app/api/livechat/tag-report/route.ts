@@ -26,7 +26,6 @@ const EXCLUDED_TAGS = new Set(
     "chatbot",
     "chatbot-transfer",
     "vip player",
-    "trustpilot review",
     "vip transfer",
     "test-chat",
     "empty chat",

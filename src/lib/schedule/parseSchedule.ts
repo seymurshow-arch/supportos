@@ -135,7 +135,7 @@ export function parseShiftValue(value: string): ParsedShift {
     };
   }
 
-  if (/^SICK\s*LEAVE$/i.test(clean)) {
+  if (/^(S|SICK\s*LEAVE)$/i.test(clean)) {
     return {
       raw,
       normalized: "Sick leave",
@@ -150,7 +150,7 @@ export function parseShiftValue(value: string): ParsedShift {
     };
   }
 
-  if (/^(VACATION|VAC|ANNUAL\s*LEAVE)$/i.test(clean)) {
+  if (/^(V|VACATION|VAC|ANNUAL\s*LEAVE)$/i.test(clean)) {
     return {
       raw,
       normalized: "Vacation",

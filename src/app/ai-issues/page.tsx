@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { SUPPORT_PROJECTS } from "@/data/supportProjects";
+import { SPORTBET_PROJECT } from "@/data/supportProjects";
 
 type TagOption = {
   tag: string;
@@ -67,7 +67,6 @@ type AiResponse = {
   error?: string;
 };
 
-const PROJECTS = [...SUPPORT_PROJECTS];
 
 function pad2(value: number) {
   return String(value).padStart(2, "0");
@@ -211,7 +210,6 @@ function ComparisonCard({
 export default function AiIssuesPage() {
   const [from, setFrom] = useState(defaultFromDate);
   const [to, setTo] = useState(() => dateInputValue(new Date()));
-  const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tags, setTags] = useState<TagOption[]>([]);
   const [tagSearch, setTagSearch] = useState("");
@@ -231,9 +229,7 @@ export default function AiIssuesPage() {
         to,
       });
 
-      if (selectedProjects.length === 1) {
-        params.set("project", selectedProjects[0]);
-      }
+      params.set("project", SPORTBET_PROJECT);
 
       const response = await fetch(`/api/livechat/tag-report?${params.toString()}`, {
         method: "GET",
@@ -266,9 +262,7 @@ export default function AiIssuesPage() {
         limit: String(limit),
       });
 
-      if (selectedProjects.length) {
-        params.set("project", selectedProjects.join(","));
-      }
+      params.set("project", SPORTBET_PROJECT);
 
       if (selectedTags.length) {
         params.set("tags", selectedTags.join(","));
@@ -410,40 +404,9 @@ export default function AiIssuesPage() {
           </div>
 
           <div className="mt-6 grid gap-6 lg:grid-cols-2">
-            <div>
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Projects</p>
-                <button
-                  onClick={() => setSelectedProjects([])}
-                  className="text-xs font-semibold text-cyan-300 hover:text-cyan-200"
-                >
-                  All projects
-                </button>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                {PROJECTS.map((project) => {
-                  const active = selectedProjects.includes(project);
-
-                  return (
-                    <button
-                      key={project}
-                      onClick={() => setSelectedProjects((prev) => uniqueToggle(prev, project))}
-                      className={`rounded-full border px-3 py-2 text-xs font-semibold transition ${
-                        active
-                          ? "border-cyan-300/40 bg-cyan-300/15 text-cyan-100"
-                          : "border-white/10 bg-white/[0.03] text-slate-300 hover:bg-white/[0.07]"
-                      }`}
-                    >
-                      {project}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <p className="mt-3 text-xs text-slate-500">
-                If no project is selected, AI analyzes all projects.
-              </p>
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Project</p>
+              <p className="mt-2 text-sm font-semibold text-cyan-100">SportBet</p>
             </div>
 
             <div>

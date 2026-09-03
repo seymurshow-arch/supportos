@@ -1,5 +1,5 @@
 import { livechatPost } from "@/livechat";
-import { SUPPORT_PROJECTS } from "@/data/supportProjects";
+import { SPORTBET_PROJECT } from "@/data/supportProjects";
 
 export type LiveChatProject = {
   name: string;
@@ -12,7 +12,7 @@ export type LiveChatGroup = {
   name: string;
 };
 
-const DEFAULT_PROJECT_NAMES = [...SUPPORT_PROJECTS];
+const DEFAULT_PROJECT_NAMES = [SPORTBET_PROJECT];
 
 function normalize(value: string) {
   return value.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();

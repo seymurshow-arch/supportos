@@ -65,21 +65,22 @@ function normalize(value: unknown) {
 
 function monthKeyFromSheetTitle(title: string) {
   const months: Record<string, number> = {
-    january: 1,
-    february: 2,
-    march: 3,
-    april: 4,
+    jan: 1, january: 1,
+    feb: 2, february: 2,
+    mar: 3, march: 3,
+    apr: 4, april: 4,
     may: 5,
-    june: 6,
-    july: 7,
-    august: 8,
-    september: 9,
-    october: 10,
-    november: 11,
-    december: 12,
+    jun: 6, june: 6,
+    jul: 7, july: 7,
+    aug: 8, august: 8,
+    sep: 9, sept: 9, september: 9,
+    oct: 10, october: 10,
+    nov: 11, november: 11,
+    dec: 12, december: 12,
   };
 
-  const match = title.trim().match(/^([A-Za-z]+)\s+(\d{2}|\d{4})$/);
+  // Supports: Aug-26, Aug - 26, August 26, August-2026
+  const match = title.trim().match(/^([A-Za-z]+)\s*(?:-|\s)\s*(\d{2}|\d{4})$/);
   if (!match) return null;
 
   const month = months[match[1].toLowerCase()];
@@ -90,20 +91,45 @@ function monthKeyFromSheetTitle(title: string) {
   return `${year}-${String(month).padStart(2, "0")}`;
 }
 
-function parseHeaderDate(value: unknown, year: number) {
+function parseHeaderDate(value: unknown, fallbackYear: number) {
   const text = normalize(value);
   if (!text) return null;
 
-  const match = text.match(/(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)?\s*,?\s*(\d{1,2})[/.](\d{1,2})(?:[/.](\d{2,4}))?/i);
-  if (!match) return null;
+  // Numeric headers: 1/2, 01.02, Mon 1/2/26
+  const numeric = text.match(/(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)?\s*,?\s*(\d{1,2})[/.](\d{1,2})(?:[/.](\d{2,4}))?/i);
+  if (numeric) {
+    const day = Number(numeric[1]);
+    const month = Number(numeric[2]);
+    let year = numeric[3] ? Number(numeric[3]) : fallbackYear;
+    if (year < 100) year += 2000;
+    if (!day || !month || month > 12 || day > 31) return null;
+    return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
 
-  const day = Number(match[1]);
-  const month = Number(match[2]);
-  let parsedYear = match[3] ? Number(match[3]) : year;
-  if (parsedYear < 100) parsedYear += 2000;
+  // Text headers used by the SportBet schedule: 1 Feb, 2 Feb, ...
+  const textMonths: Record<string, number> = {
+    jan: 1, january: 1,
+    feb: 2, february: 2,
+    mar: 3, march: 3,
+    apr: 4, april: 4,
+    may: 5,
+    jun: 6, june: 6,
+    jul: 7, july: 7,
+    aug: 8, august: 8,
+    sep: 9, sept: 9, september: 9,
+    oct: 10, october: 10,
+    nov: 11, november: 11,
+    dec: 12, december: 12,
+  };
+  const named = text.match(/(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)?\s*,?\s*(\d{1,2})\s+([A-Za-z]+)(?:\s+(\d{2,4}))?/i);
+  if (!named) return null;
 
-  if (!day || !month || month > 12 || day > 31) return null;
-  return `${parsedYear}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  const day = Number(named[1]);
+  const month = textMonths[named[2].toLowerCase()];
+  let year = named[3] ? Number(named[3]) : fallbackYear;
+  if (year < 100) year += 2000;
+  if (!day || !month || day > 31) return null;
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
 }
 
 async function getSheets(accessToken: string, spreadsheetId: string) {
@@ -150,7 +176,9 @@ export async function GET(request: NextRequest) {
 
     const clientEmail = process.env.GOOGLE_SHEETS_CLIENT_EMAIL?.trim();
     const privateKey = process.env.GOOGLE_SHEETS_PRIVATE_KEY?.replace(/\\n/g, "\n");
-    const spreadsheetId = process.env.GOOGLE_SCHEDULE_SPREADSHEET_ID?.trim();
+    const spreadsheetId =
+      process.env.GOOGLE_SCHEDULE_SPREADSHEET_ID?.trim() ||
+      process.env.GOOGLE_SHEETS_SPREADSHEET_ID?.trim();
 
     if (!clientEmail || !privateKey || !spreadsheetId) {
       return NextResponse.json(

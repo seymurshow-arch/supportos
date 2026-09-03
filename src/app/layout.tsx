@@ -3,20 +3,14 @@ import "./globals.css";
 import AppShell from "@/components/layout/AppShell";
 
 export const metadata: Metadata = {
-  title: "SupportOS",
-  description: "Internal support analytics platform",
+  title: "SportBet Support",
+  description: "SportBet support operations platform",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>
-        <AppShell>{children}</AppShell>
-      </body>
+      <body><AppShell>{children}</AppShell></body>
     </html>
   );
 }

@@ -4,24 +4,15 @@ type PageHeaderProps = {
   description?: string;
 };
 
-export default function PageHeader({
-  eyebrow,
-  title,
-  description,
-}: PageHeaderProps) {
+export default function PageHeader({ eyebrow, title, description }: PageHeaderProps) {
   return (
     <div>
-      <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-300">
+      <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.25em] text-sb-green">
+        <span className="h-1.5 w-1.5 rounded-full bg-sb-green" />
         {eyebrow}
-      </p>
-      <h1 className="mt-3 text-4xl font-bold tracking-tight text-white">
-        {title}
-      </h1>
-      {description ? (
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-white/55">
-          {description}
-        </p>
-      ) : null}
+      </div>
+      <h1 className="mt-2 text-3xl font-bold tracking-tight text-white sm:text-4xl">{title}</h1>
+      {description ? <p className="mt-3 max-w-3xl text-sm leading-6 text-[#8ea0b8]">{description}</p> : null}
     </div>
   );
 }

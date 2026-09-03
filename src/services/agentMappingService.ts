@@ -115,3 +115,29 @@ export async function deleteAgentMapping(
     };
   }
 }
+
+export async function pruneAgentMappings(
+  activeNames: string[]
+): Promise<ServiceResult<{ removed: number }>> {
+  try {
+    const response = await fetch("/api/agent-mappings", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        active_names: activeNames.map((name) => name.trim()).filter(Boolean),
+      }),
+    });
+
+    return await parseResponse<{ removed: number }>(response);
+  } catch (error) {
+    return {
+      data: null,
+      error: {
+        message: error instanceof Error ? error.message : "Failed to clean old agent mappings",
+      },
+    };
+  }
+}

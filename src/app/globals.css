@@ -1,8 +1,26 @@
 @import "tailwindcss";
 
+@theme {
+  --color-sb-green: #75f296;
+  --color-sb-red: #f12c4f;
+  --color-sb-navy: #07101d;
+  --color-sb-panel: #0d1a2d;
+  --color-sb-panel-2: #111f34;
+  --color-sb-line: #20314a;
+}
+
 :root {
-  --background: #070a12;
-  --foreground: #ffffff;
+  --background: #07101d;
+  --foreground: #f7f9fc;
+  --sb-green: #75f296;
+  --sb-green-soft: rgba(117, 242, 150, 0.1);
+  --sb-red: #f12c4f;
+  --sb-navy: #07101d;
+  --sb-sidebar: #0a1526;
+  --sb-panel: #0d1a2d;
+  --sb-panel-2: #111f34;
+  --sb-line: #20314a;
+  --sb-muted: #8ea0b8;
 }
 
 * {
@@ -16,6 +34,75 @@ body {
   color: var(--foreground);
 }
 
+html {
+  color-scheme: dark;
+}
+
 body {
   margin: 0;
+  background:
+    radial-gradient(circle at 78% -10%, rgba(117, 242, 150, 0.08), transparent 28rem),
+    radial-gradient(circle at 18% 12%, rgba(55, 83, 127, 0.16), transparent 26rem),
+    #07101d;
+}
+
+::selection {
+  background: rgba(117, 242, 150, 0.24);
+  color: #ffffff;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #07101d;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #243954;
+  border: 2px solid #07101d;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #315073;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid rgba(117, 242, 150, 0.55);
+  outline-offset: 2px;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(0.75);
+}
+
+.sb-panel {
+  border: 1px solid rgba(115, 144, 182, 0.18);
+  background: linear-gradient(180deg, rgba(17, 31, 52, 0.94), rgba(11, 24, 42, 0.96));
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.24);
+}
+
+.sb-input {
+  border: 1px solid rgba(115, 144, 182, 0.18);
+  background: #0f1d31;
+  color: #f7f9fc;
+}
+
+.sb-input:focus {
+  border-color: rgba(117, 242, 150, 0.48);
 }

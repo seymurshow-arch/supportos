@@ -196,7 +196,7 @@ export default function SchedulePage() {
               <select
                 value={monthKey}
                 onChange={(event) => loadMonth(event.target.value)}
-                className="h-12 rounded-2xl border border-white/10 bg-[#080B12] px-4 text-white outline-none"
+                className="h-12 rounded-2xl border border-white/10 bg-[#091426] px-4 text-white outline-none"
               >
                 {availableMonths.length === 0 && <option value={monthKey}>{monthKey}</option>}
                 {availableMonths.map((month) => (
@@ -208,7 +208,7 @@ export default function SchedulePage() {
             <button
               onClick={() => loadMonth(monthKey)}
               disabled={loading}
-              className="flex h-12 items-center gap-2 rounded-2xl border border-cyan-400/25 bg-cyan-400/10 px-5 font-semibold text-cyan-200 disabled:opacity-50"
+              className="flex h-12 items-center gap-2 rounded-2xl border border-sb-green/25 bg-sb-green/10 px-5 font-semibold text-sb-green disabled:opacity-50"
             >
               <RefreshCw size={17} className={loading ? "animate-spin" : ""} /> Refresh
             </button>
@@ -299,7 +299,7 @@ export default function SchedulePage() {
                     <tr key={agent} className="border-t border-white/10">
                       <td className="sticky left-0 z-10 border-r border-white/10 bg-[#10141D] px-3 py-2">
                         <div className="font-semibold text-white">{agent}</div>
-                        <div className={`mt-1 text-[11px] ${details?.email ? "text-cyan-300/65" : "text-red-300"}`}>{details?.email ?? "Email not mapped"}</div>
+                        <div className={`mt-1 text-[11px] ${details?.email ? "text-sb-green/65" : "text-red-300"}`}>{details?.email ?? "Email not mapped"}</div>
                       </td>
                       {parsed.days.map((day, dayIndex) => {
                         const value = parsed.rows[agent]?.[dayIndex] ?? "";

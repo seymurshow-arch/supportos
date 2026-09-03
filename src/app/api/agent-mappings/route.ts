@@ -142,3 +142,54 @@ export async function DELETE(request: Request) {
     );
   }
 }
+
+export async function PUT(request: Request) {
+  try {
+    const body = await request.json();
+    const activeNames = Array.isArray(body?.active_names)
+      ? body.active_names.map(normalizeName).filter(Boolean)
+      : [];
+
+    // Safety: never wipe mappings if Google Schedule returned no agents.
+    if (activeNames.length === 0) {
+      return NextResponse.json({ data: { removed: 0 } });
+    }
+
+    const supabase = getSupabase();
+    const { data: existing, error: readError } = await supabase
+      .from("agent_schedule_mappings")
+      .select("schedule_name");
+
+    if (readError) {
+      console.error("[agent-mappings][PUT] Read error:", readError);
+      return NextResponse.json({ error: readError.message }, { status: 500 });
+    }
+
+    const active = new Set(activeNames);
+    const stale = (existing ?? [])
+      .map((row) => normalizeName(row.schedule_name))
+      .filter((name) => name && !active.has(name));
+
+    if (stale.length === 0) {
+      return NextResponse.json({ data: { removed: 0 } });
+    }
+
+    const { error: deleteError } = await supabase
+      .from("agent_schedule_mappings")
+      .delete()
+      .in("schedule_name", stale);
+
+    if (deleteError) {
+      console.error("[agent-mappings][PUT] Delete error:", deleteError);
+      return NextResponse.json({ error: deleteError.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ data: { removed: stale.length } });
+  } catch (error) {
+    console.error("[agent-mappings][PUT] Error:", error);
+    return NextResponse.json(
+      { error: error instanceof Error ? error.message : "Failed to clean old mappings" },
+      { status: 500 }
+    );
+  }
+}

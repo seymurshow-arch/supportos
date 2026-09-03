@@ -14,7 +14,6 @@ type AgentKpiResult = {
   frtChats: number;
   frtEmails: number;
   art: number;
-  trustpilot: number;
 };
 
 type HelpDeskAgent = {
@@ -33,7 +32,6 @@ type HelpDeskResponseTimeRecord = {
 };
 
 const REPORT_TIMEZONE = "Europe/Kiev";
-const TRUSTPILOT_TAG = "Trustpilot review";
 
 const HELPDESK_API_BASE_URL =
   process.env.HELPDESK_API_BASE_URL?.trim() || "https://api.helpdesk.com/v1";
@@ -170,60 +168,6 @@ function chatBelongsToAgent(chat: any, agent: string) {
     : [];
 
   return ids.includes(normalize(agent));
-}
-
-async function getTrustpilot(from: string, to: string, agents: string[]) {
-  const counts: Record<string, Set<string>> = {};
-  agents.forEach((agent) => {
-    counts[agent] = new Set<string>();
-  });
-
-  let pageId: string | undefined;
-
-  for (let i = 0; i < 200; i++) {
-    const body: any = pageId
-      ? { page_id: pageId }
-      : {
-          limit: 100,
-          sort_order: "desc",
-          filters: {
-            from: archiveDateTime(from),
-            to: archiveDateTime(to, true),
-            tags: {
-              values: [TRUSTPILOT_TAG],
-              require_every_value: false,
-            },
-          },
-        };
-
-    const response = await livechatPost<any>(
-      "/v3.5/agent/action/list_archives",
-      body
-    );
-
-    const chats = Array.isArray(response?.chats) ? response.chats : [];
-
-    for (const chat of chats) {
-      const id = String(chat?.thread?.id || chat?.id || "");
-      if (!id) continue;
-
-      for (const agent of agents) {
-        if (chatBelongsToAgent(chat, agent)) {
-          counts[agent].add(id);
-        }
-      }
-    }
-
-    if (!response?.next_page_id) break;
-    pageId = response.next_page_id;
-  }
-
-  const result: Record<string, number> = {};
-  agents.forEach((agent) => {
-    result[agent] = counts[agent].size;
-  });
-
-  return result;
 }
 
 function getHelpDeskAuth() {
@@ -445,8 +389,7 @@ export async function GET(request: Request) {
     const requestedAgents =
       agents.length > 0 ? agents : Object.keys(records).map(normalize);
 
-    const [trustpilot, artEntries, frtEmails] = await Promise.all([
-      getTrustpilot(from, to, requestedAgents),
+    const [artEntries, frtEmails] = await Promise.all([
       Promise.all(
         requestedAgents.map(
           async (agent) => [agent, await getArt(from, to, agent)] as const
@@ -468,7 +411,6 @@ export async function GET(request: Request) {
         frtChats: getFrt(record),
         frtEmails: frtEmails[agent] || 0,
         art: art[agent] || 0,
-        trustpilot: trustpilot[agent] || 0,
       };
     });
 
@@ -484,7 +426,6 @@ export async function GET(request: Request) {
           "HelpDesk averageSecondsToResponse only; excludes assignment time; spam=false",
         art: "includes spam",
         csat: "excludes spam",
-        trustpilot: "tag Trustpilot review",
       },
     });
   } catch (error) {
